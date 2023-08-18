@@ -2,54 +2,56 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-  branches: 'main'
+    branches: ['main']
+    # paths: ['frontend']
+  workflow_dispatch:
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
-  build_site:
-  runs-on: ubuntu-latest
-  steps:
-    - name: Checkout
-    uses: actions/checkout@v3
+  # Build job
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: './frontend'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/configure-pages@v1
+        id: pages
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+      - run: npm ci
+      - run: npm run build
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: ./build
+    # At a minimum this job should upload artifacts using actions/upload-pages-artifact
 
-    - name: Install Node.js
-    uses: actions/setup-node@v3
-    with:
-      node-version: 18
-      cache: npm
-
-    - name: Install dependencies
-    run: |
-      npm install
-    working-directory: ./frontend
-
-    - name: build
-    env:
-      BASE_PATH: '/movie-reviews'
-    run: |
-      npm run build
-      touch build/.nojekyll
-    working-directory: ./frontend
-
-    - name: Upload Artifacts
-    uses: actions/upload-pages-artifact@v1
-    with:
-      # this should match the `pages` option in your adapter-static options
-      path: 'build/'
-    working-directory: ./frontend
-
+  # Deploy job
   deploy:
-  needs: build_site
-  runs-on: ubuntu-latest
+    # Add a dependency to the build job
+    needs: build
 
-  permissions:
-    pages: write
-    id-token: write
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write      # to deploy to Pages
+      id-token: write   # to verify the deployment originates from an appropriate source
 
-  environment:
-    name: github-pages
-    url: ${{ steps.deployment.outputs.page_url }}
-  
-  steps:
-    - name: Deploy
-    id: deployment
-    uses: actions/deploy-pages@v1
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    # Specify runner + deployment step
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2 # or the latest "vX.X.X" version tag for this action
